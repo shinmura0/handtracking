@@ -9,7 +9,7 @@ import datetime
 import argparse
 
 frame_processed = 0
-score_thresh = 0.2
+score_thresh = 0.6#0.2
 
 # Create a worker thread that loads graph and
 # does detection on images in an input queue and puts it on an output queue
@@ -153,6 +153,9 @@ if __name__ == '__main__':
                 cv2.imshow('Multi-Threaded Detection', output_frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
+                if (num_frames == 400):#add
+                    num_frames = 0#add
+                    start_time = datetime.datetime.now()#add
             else:
                 if (num_frames == 400):
                     num_frames = 0
