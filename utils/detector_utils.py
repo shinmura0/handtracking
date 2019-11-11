@@ -15,13 +15,14 @@ detection_graph = tf.Graph()
 sys.path.append("..")
 
 # score threshold for showing bounding boxes.
-_score_thresh = 0.27
+_score_thresh = 0.6#0.27
 
-MODEL_NAME = 'hand_inference_graph'
+MODEL_NAME1 = 'hand_inference_graph'
+MODEL_NAME2 = 'model-checkpoint/ssdlitemobilenetv2'
 # Path to frozen detection graph. This is the actual model that is used for the object detection.
-PATH_TO_CKPT = MODEL_NAME + '/frozen_inference_graph.pb'
+PATH_TO_CKPT = MODEL_NAME2 + '/frozen_inference_graph.pb'
 # List of the strings that is used to add correct label for each box.
-PATH_TO_LABELS = os.path.join(MODEL_NAME, 'hand_label_map.pbtxt')
+PATH_TO_LABELS = os.path.join(MODEL_NAME1, 'hand_label_map.pbtxt')
 
 NUM_CLASSES = 1
 # load label map
@@ -51,7 +52,7 @@ def load_inference_graph():
 # draw the detected bounding boxes on the images
 # You can modify this to also draw a label.
 def draw_box_on_image(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
-    for i in range(num_hands_detect):
+    for i in range(1):
         if (scores[i] > score_thresh):
             (left, right, top, bottom) = (boxes[i][1] * im_width, boxes[i][3] * im_width,
                                           boxes[i][0] * im_height, boxes[i][2] * im_height)
