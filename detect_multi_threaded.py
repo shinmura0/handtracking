@@ -150,7 +150,6 @@ if __name__ == '__main__':
                 if (args.fps > 0):
                     detector_utils.draw_fps_on_image("FPS : " + str(int(fps)),
                                                      output_frame)
-                output_frame = cv2.resize(output_frame, (600, 400))
                 cv2.imshow('Multi-Threaded Detection', output_frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
