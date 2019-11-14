@@ -66,11 +66,14 @@ def draw_box_on_image(num_hands_detect, score_thresh, scores, boxes, im_width, i
 
             original_width = image_np.shape[1]
             original_height = image_np.shape[0]
+            
+            p1r = (int(left*pconv_size/original_width), int(top*pconv_size/original_width))
+            p2r = (int(right*pconv_size/original_height), int(bottom*pconv_size/original_height))
 
             # Mask
             image_np = cv2.resize(image_np, (pconv_size, pconv_size)) / 255
             img = np.zeros(image_np.shape, np.uint8)
-            cv2.rectangle(img, p1, p2, (1, 1, 1), thickness=-1)
+            cv2.rectangle(img, p1r, p2r, (1, 1, 1), thickness=-1)
             mask = 1-img
 
             # Image + mask
