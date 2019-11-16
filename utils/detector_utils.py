@@ -31,6 +31,10 @@ categories = label_map_util.convert_label_map_to_categories(
     label_map, max_num_classes=NUM_CLASSES, use_display_name=True)
 category_index = label_map_util.create_category_index(categories)
 
+path = "pictures/"
+if not os.path.exists(path):
+    os.mkdir(path)
+pic_num = 1
 
 # Load a frozen infrerence graph into memory
 def load_inference_graph():
@@ -59,7 +63,15 @@ def draw_box_on_image(num_hands_detect, score_thresh, scores, boxes, im_width, i
             p1 = (int(left), int(top))
             p2 = (int(right), int(bottom))
             cv2.rectangle(image_np, p1, p2, (77, 255, 9), 3, 1)
-
+            
+def get_pic(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
+    global pic_num
+    for i in range(1):
+        if (scores[i] > score_thresh):
+            (left, right, top, bottom) = (boxes[i][1] * im_width, boxes[i][3] * im_width,
+                                          boxes[i][0] * im_height, boxes[i][2] * im_height)
+            cv2.imwrite(path+str(pic_num)+".jpg",image_np[top:bottom, left:right])
+            pic_num += 1
 
 # Show fps value on image.
 def draw_fps_on_image(fps, image_np):
