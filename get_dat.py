@@ -1,160 +1,174 @@
-import numpy as np
-import sys
-import tensorflow as tf
-import os
-from threading import Thread
-from datetime import datetime
+from utils import detector_utils as detector_utils
 import cv2
-from utils import label_map_util
-from collections import defaultdict
-import keras
-from keras.models import model_from_json
-from keras import backend as K
-from libs.pconv_model import PConvUnet
+import tensorflow as tf
+import multiprocessing
+from multiprocessing import Queue, Pool
+import time
+from utils.detector_utils import WebcamVideoStream
+import datetime
+import argparse
 
-print("Model loading...")
-pconv_size = 256
-model = PConvUnet(img_rows=pconv_size, img_cols=pconv_size)
-model.load("model/model.h5")
+frame_processed = 0
+score_thresh = 0.6#0.2
 
-detection_graph = tf.Graph()
-sys.path.append("..")
-
-# score threshold for showing bounding boxes.
-_score_thresh = 0.27
-
-MODEL_NAME = 'hand_inference_graph'
-# Path to frozen detection graph. This is the actual model that is used for the object detection.
-PATH_TO_CKPT = MODEL_NAME + '/frozen_inference_graph.pb'
-# List of the strings that is used to add correct label for each box.
-PATH_TO_LABELS = os.path.join(MODEL_NAME, 'hand_label_map.pbtxt')
-
-NUM_CLASSES = 1
-# load label map
-label_map = label_map_util.load_labelmap(PATH_TO_LABELS)
-categories = label_map_util.convert_label_map_to_categories(
-    label_map, max_num_classes=NUM_CLASSES, use_display_name=True)
-category_index = label_map_util.create_category_index(categories)
+# Create a worker thread that loads graph and
+# does detection on images in an input queue and puts it on an output queue
 
 
-# Load a frozen infrerence graph into memory
-def load_inference_graph():
+def worker(input_q, output_q, cap_params, frame_processed):
+    print(">> loading frozen model for worker")
+    detection_graph, sess = detector_utils.load_inference_graph()
+    sess = tf.Session(graph=detection_graph)
+    while True:
+        #print("> ===== in worker loop, frame ", frame_processed)
+        frame = input_q.get()
+        if (frame is not None):
+            # Actual detection. Variable boxes contains the bounding box cordinates for hands detected,
+            # while scores contains the confidence for each of these boxes.
+            # Hint: If len(boxes) > 1 , you may assume you have found atleast one hand (within your score threshold)
 
-    # load frozen tensorflow model into memory
-    print("> ====== loading HAND frozen graph into memory")
-    detection_graph = tf.Graph()
-    with detection_graph.as_default():
-        od_graph_def = tf.GraphDef()
-        with tf.gfile.GFile(PATH_TO_CKPT, 'rb') as fid:
-            serialized_graph = fid.read()
-            od_graph_def.ParseFromString(serialized_graph)
-            tf.import_graph_def(od_graph_def, name='')
-        sess = tf.Session(graph=detection_graph)
-    print(">  ====== Hand Inference graph loaded.")
-    return detection_graph, sess
-
-
-# draw the detected bounding boxes on the images
-# You can modify this to also draw a label.
-def draw_box_on_image(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
-    for i in range(num_hands_detect):
-        if (scores[i] > score_thresh):
-            (left, right, top, bottom) = (boxes[i][1] * im_width, boxes[i][3] * im_width,
-                                          boxes[i][0] * im_height, boxes[i][2] * im_height)
-            p1 = (int(left), int(top))
-            p2 = (int(right), int(bottom))
-
-            original_width = image_np.shape[1]
-            original_height = image_np.shape[0]
-            
-            p1r = (int(left*pconv_size/original_width), int(top*pconv_size/original_width))
-            p2r = (int(right*pconv_size/original_height), int(bottom*pconv_size/original_height))
-
-            # Mask
-            image_np = cv2.resize(image_np, (pconv_size, pconv_size)) / 255
-            img = np.zeros(image_np.shape, np.uint8)
-            cv2.rectangle(img, p1r, p2r, (1, 1, 1), thickness=-1)
-            mask = 1-img
-
-            # Image + mask
-            #target_img = image_np[left:right, top:bottom]
-            #target_img = cv2.cvtColor(target_img, cv2.COLOR_BGR2RGB)
-            image_np[mask==0] = 1
-            image_np = model.predict([np.expand_dims(image_np, axis=0), np.expand_dims(mask, axis=0)])
-            image_np = cv2.resize(image_np, (original_height, original_width))*255
-
-            cv2.rectangle(image_np, p1, p2, (77, 255, 9), 3, 1)
-
-# Show fps value on image.
-def draw_fps_on_image(fps, image_np):
-    cv2.putText(image_np, fps, (20, 50),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.75, (77, 255, 9), 2)
+            boxes, scores = detector_utils.detect_objects(
+                frame, detection_graph, sess)
+            # draw bounding boxes
+            detector_utils.get_pic(
+                cap_params['num_hands_detect'], cap_params["score_thresh"],
+                scores, boxes, cap_params['im_width'], cap_params['im_height'],
+                frame)
+            # add frame annotated with bounding box to queue
+            output_q.put(frame)
+            frame_processed += 1
+        else:
+            output_q.put(frame)
+    sess.close()
 
 
-# Actual detection .. generate scores and bounding boxes given an image
-def detect_objects(image_np, detection_graph, sess):
-    # Definite input and output Tensors for detection_graph
-    image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
-    # Each box represents a part of the image where a particular object was detected.
-    detection_boxes = detection_graph.get_tensor_by_name(
-        'detection_boxes:0')
-    # Each score represent how level of confidence for each of the objects.
-    # Score is shown on the result image, together with the class label.
-    detection_scores = detection_graph.get_tensor_by_name(
-        'detection_scores:0')
-    detection_classes = detection_graph.get_tensor_by_name(
-        'detection_classes:0')
-    num_detections = detection_graph.get_tensor_by_name(
-        'num_detections:0')
+if __name__ == '__main__':
 
-    image_np_expanded = np.expand_dims(image_np, axis=0)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-src',
+        '--source',
+        dest='video_source',
+        type=int,
+        default=0,
+        help='Device index of the camera.')
+    parser.add_argument(
+        '-nhands',
+        '--num_hands',
+        dest='num_hands',
+        type=int,
+        default=2,
+        help='Max number of hands to detect.')
+    parser.add_argument(
+        '-fps',
+        '--fps',
+        dest='fps',
+        type=int,
+        default=1,
+        help='Show FPS on detection/display visualization')
+    parser.add_argument(
+        '-wd',
+        '--width',
+        dest='width',
+        type=int,
+        default=300,
+        help='Width of the frames in the video stream.')
+    parser.add_argument(
+        '-ht',
+        '--height',
+        dest='height',
+        type=int,
+        default=200,
+        help='Height of the frames in the video stream.')
+    parser.add_argument(
+        '-ds',
+        '--display',
+        dest='display',
+        type=int,
+        default=1,
+        help='Display the detected images using OpenCV. This reduces FPS')
+    parser.add_argument(
+        '-num-w',
+        '--num-workers',
+        dest='num_workers',
+        type=int,
+        default=4,
+        help='Number of workers.')
+    parser.add_argument(
+        '-q-size',
+        '--queue-size',
+        dest='queue_size',
+        type=int,
+        default=5,
+        help='Size of the queue.')
+    args = parser.parse_args()
 
-    (boxes, scores, classes, num) = sess.run(
-        [detection_boxes, detection_scores,
-            detection_classes, num_detections],
-        feed_dict={image_tensor: image_np_expanded})
-    return np.squeeze(boxes), np.squeeze(scores)
+    input_q = Queue(maxsize=args.queue_size)
+    output_q = Queue(maxsize=args.queue_size)
 
+    video_capture = WebcamVideoStream(
+        src=args.video_source, width=args.width, height=args.height).start()
 
-# Code to thread reading camera input.
-# Source : Adrian Rosebrock
-# https://www.pyimagesearch.com/2017/02/06/faster-video-file-fps-with-cv2-videocapture-and-opencv/
-class WebcamVideoStream:
-    def __init__(self, src, width, height):
-        # initialize the video camera stream and read the first frame
-        # from the stream
-        self.stream = cv2.VideoCapture(src)
-        self.stream.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        self.stream.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        (self.grabbed, self.frame) = self.stream.read()
+    cap_params = {}
+    frame_processed = 0
+    cap_params['im_width'], cap_params['im_height'] = video_capture.size()
+    cap_params['score_thresh'] = score_thresh
 
-        # initialize the variable used to indicate if the thread should
-        # be stopped
-        self.stopped = False
+    # max number of hands we want to detect/track
+    cap_params['num_hands_detect'] = args.num_hands
 
-    def start(self):
-        # start the thread to read frames from the video stream
-        Thread(target=self.update, args=()).start()
-        return self
+    print(cap_params, args)
 
-    def update(self):
-        # keep looping infinitely until the thread is stopped
-        while True:
-            # if the thread indicator variable is set, stop the thread
-            if self.stopped:
-                return
+    # spin up workers to paralleize detection.
+    pool = Pool(args.num_workers, worker,
+                (input_q, output_q, cap_params, frame_processed))
 
-            # otherwise, read the next frame from the stream
-            (self.grabbed, self.frame) = self.stream.read()
+    start_time = datetime.datetime.now()
+    num_frames = 0
+    fps = 0
+    index = 0
 
-    def read(self):
-        # return the frame most recently read
-        return self.frame
+    cv2.namedWindow('Multi-Threaded Detection', cv2.WINDOW_NORMAL)
 
-    def size(self):
-        # return size of the capture device
-        return self.stream.get(3), self.stream.get(4)
+    while True:
+        frame = video_capture.read()
+        frame = cv2.flip(frame, 1)
+        index += 1
 
-    def stop(self):
-        # indicate that the thread should be stopped
-        self.stopped = True
+        input_q.put(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        output_frame = output_q.get()
+
+        output_frame = cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR)
+
+        elapsed_time = (datetime.datetime.now() - start_time).total_seconds()
+        num_frames += 1
+        fps = num_frames / elapsed_time
+        # print("frame ",  index, num_frames, elapsed_time, fps)
+
+        if (output_frame is not None):
+            if (args.display > 0):
+                if (args.fps > 0):
+                    #detector_utils.draw_fps_on_image("FPS : " + str(int(fps)),
+                                                     output_frame)
+                cv2.imshow('Multi-Threaded Detection', output_frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+                if (num_frames == 400):#add
+                    num_frames = 0#add
+                    start_time = datetime.datetime.now()#add
+            else:
+                if (num_frames == 400):
+                    num_frames = 0
+                    start_time = datetime.datetime.now()
+                else:
+                    print("frames processed: ", index, "elapsed time: ",
+                          elapsed_time, "fps: ", str(int(fps)))
+        else:
+            # print("video end")
+            break
+    elapsed_time = (datetime.datetime.now() - start_time).total_seconds()
+    fps = num_frames / elapsed_time
+    print("fps", fps)
+    pool.terminate()
+    video_capture.stop()
+    cv2.destroyAllWindows()
