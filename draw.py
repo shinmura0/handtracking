@@ -30,10 +30,11 @@ def worker(input_q, output_q, cap_params, frame_processed):
             boxes, scores = detector_utils.detect_objects(
                 frame, detection_graph, sess)
             # draw bounding boxes
-            detector_utils.draw_box_on_image(
-                cap_params['num_hands_detect'], cap_params["score_thresh"],
-                scores, boxes, cap_params['im_width'], cap_params['im_height'],
-                frame)
+            point = detector_utils.draw_and_get_point(
+                        cap_params['num_hands_detect'], cap_params["score_thresh"],
+                        scores, boxes, cap_params['im_width'], cap_params['im_height'],
+                        frame)
+            point = detector_utils.draw_point(point, frame)
             # add frame annotated with bounding box to queue
             output_q.put(frame)
             frame_processed += 1
