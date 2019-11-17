@@ -70,7 +70,7 @@ def get_pic(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, 
         if (scores[i] > score_thresh):
             (left, right, top, bottom) = (boxes[i][1] * im_width, boxes[i][3] * im_width,
                                           boxes[i][0] * im_height, boxes[i][2] * im_height)
-            cv2.imwrite(path+str(pic_num)+".jpg",image_np[top:bottom, left:right])
+            cv2.imwrite(path+str(pic_num)+".jpg",image_np[int(top):int(bottom), int(left):int(right)])
             pic_num += 1
 
 # Show fps value on image.
