@@ -132,7 +132,6 @@ if __name__ == '__main__':
 
     while True:
         frame = video_capture.read()
-        frame = cv2.flip(frame, 1)
         index += 1
 
         input_q.put(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -149,7 +148,8 @@ if __name__ == '__main__':
             if (args.display > 0):
                 if (args.fps > 0):
                     #detector_utils.draw_fps_on_image("FPS : " + str(int(fps)),
-                                                     output_frame)
+                    #                                 output_frame)
+                    pass
                 cv2.imshow('Multi-Threaded Detection', output_frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
