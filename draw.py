@@ -19,6 +19,8 @@ def worker(input_q, output_q, cap_params, frame_processed):
     print(">> loading frozen model for worker")
     detection_graph, sess = detector_utils.load_inference_graph()
     sess = tf.Session(graph=detection_graph)
+    frame = input_q.get()
+    matrix = np.zeros(frame.shape)
     while True:
         #print("> ===== in worker loop, frame ", frame_processed)
         frame = input_q.get()
