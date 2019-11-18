@@ -64,6 +64,19 @@ def draw_box_on_image(num_hands_detect, score_thresh, scores, boxes, im_width, i
             p2 = (int(right), int(bottom))
             cv2.rectangle(image_np, p1, p2, (77, 255, 9), 3, 1)
             
+def draw_and_get_point(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np, matrix):
+    for i in range(1):
+        if (scores[i] > score_thresh):
+            (left, right, top, bottom) = (boxes[i][1] * im_width, boxes[i][3] * im_width,
+                                          boxes[i][0] * im_height, boxes[i][2] * im_height)
+            matrix[(int(left), int(top), 0] = 10
+            matrix[(int(left), int(top), 1] = 10
+            matrix[(int(left), int(top), 2] = 255
+        
+detector_utils.draw_point(matrix, frame):
+    frame[matrix==10] = 10
+    frame[matrix==255] = 255
+            
 def get_pic(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
     global pic_num
     for i in range(1):
