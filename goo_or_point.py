@@ -4,7 +4,68 @@ import tensorflow as tf
 import datetime
 import argparse
 
+thresh1 = 10
+thresh2 = 10
+
 detection_graph, sess = detector_utils.load_inference_graph()
+model_anomaly = 
+model_partial = 
+ms1 = 
+ms2 = 
+lof1 = 
+lof2 = 
+flag = False
+status = "none"
+matrix = []
+
+def anomaly_detection(img, ms, lof):
+    score = model_anomaly.predict(img, batch_size=1)
+    score = score.reshape((1,-1))
+    score = ms.fit_transform(score)
+    return -lof._decision_function(score)    
+
+def anomaly_detection_and_draw(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
+    global flag, status, matrix
+    if (scores[0] > score_thresh):
+        (left, right, top, bottom) = (boxes[i][1] * im_width, boxes[i][3] * im_width,
+                                      boxes[i][0] * im_height, boxes[i][2] * im_height)
+        p1 = (int(left), int(top))
+        p2 = (int(right), int(bottom))
+        
+        # pointer or not
+        if status == "none":
+            score = anomaly_detection(image_np[int(top):int(bottom), int(left):int(right)], ms1, lof1)
+            if score < thresh1:
+                flag = True
+                status = "pointer"
+                matrix.append([int(left), int(top)])
+            else:
+                status = "none"
+                
+        # magic or not
+        if flag == True and not status == "pointer":
+            score = anomaly_detection(image_np[int(top):int(bottom), int(left):int(right)], ms2, lof2)
+            if score < thresh2:
+                flag = False
+                status = "magic"
+            else:
+                status = "none"
+                
+        # draw
+        if status == "pointer":
+            cv2.rectangle(image_np, p1, p2, (77, 77, 255), 3, 1)
+        elif status == "magic":
+            cv2.rectangle(image_np, p1, p2, (255, 241, 144), 3, 1)
+        else: #normal
+            cv2.rectangle(image_np, p1, p2, (77, 255, 9), 3, 1)
+            
+    # pointer draw
+    if flag == True: 
+        if len(matrix) > 2:
+            xy = np.array(matrix)
+            p1 = (int(np.min(xy[:,0])), int(np.min(xy[:,1])))
+            p2 = (int(np.max(xy[:,0])), int(np.max(xy[:,1])))
+            cv2.rectangle(image_np, p1, p2, (255, 77, 77), 3, 1)
 
 if __name__ == '__main__':
 
@@ -78,8 +139,6 @@ if __name__ == '__main__':
 
     cv2.namedWindow('Single-Threaded Detection', cv2.WINDOW_NORMAL)
     
-    matrix = []
-
     while True:
         # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
         ret, image_np = cap.read()
