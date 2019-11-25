@@ -6,14 +6,14 @@ import argparse
 
 thresh1 = 10
 thresh2 = 10
+m_input_size = 256
 
 detection_graph, sess = detector_utils.load_inference_graph()
-model_anomaly = 
-model_partial = 
+print("model loading...")
+model_anomaly = keras.models.load_model('model/model_anomaly.h5', compile=False)
+model_partial = keras.models.load_model('model/model_pconv.h5', compile=False, custom_objects={'PConv2D': PConv2D})
 ms1 = 
-ms2 = 
 lof1 = 
-lof2 = 
 flag = False
 status = "none"
 matrix = []
@@ -44,14 +44,28 @@ def anomaly_detection_and_draw(num_hands_detect, score_thresh, scores, boxes, im
                 
         # magic or not
         if flag == True and not status == "pointer":
-            score = anomaly_detection(image_np[int(top):int(bottom), int(left):int(right)], ms2, lof2)
+            score = anomaly_detection(image_np[int(top):int(bottom), int(left):int(right)], ms1, lof1)
             if score < thresh2:
                 flag = False
                 status = "magic"
+                
+                # Mask
+                img = np.zeros(image_np.shape, np.uint8)
+                cv2.rectangle(img, (int(top), int(left)), (int(bottom), int(right)), (1, 1, 1), thickness=-1)
+                mask = 1-img
+
+                # Image + mask
+                img = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+                img = cv2.resize(img, (m_input_size, m_input_size)) / 255
+                img[mask==0] = 1
+                predict_img = model.predict([np.expand_dims(img, axis=0), np.expand_dims(mask, axis=0)])
+
+                output = predict_img.reshape(image_np.shape)
+                output = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
             else:
                 status = "none"
                 
-        # draw
+        # hand draw
         if status == "pointer":
             cv2.rectangle(image_np, p1, p2, (77, 77, 255), 3, 1)
         elif status == "magic":
