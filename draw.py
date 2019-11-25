@@ -102,7 +102,7 @@ if __name__ == '__main__':
                                          scores, boxes, im_width, im_height,
                                          image_np)
         
-        detector_utils.draw_point(cnum_hands_detect, args.score_thresh,
+        detector_utils.draw_point(num_hands_detect, args.score_thresh,
                                          scores, boxes, im_width, im_height,
                                          image_np, matrix)
 
