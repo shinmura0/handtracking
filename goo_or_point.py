@@ -3,28 +3,13 @@ import cv2
 import tensorflow as tf
 import datetime
 import argparse
-
-thresh1 = 10
-thresh2 = 10
-m_input_size = 256
+import numpy as np
 
 detection_graph, sess = detector_utils.load_inference_graph()
 print("model loading...")
-model_anomaly = keras.models.load_model('model/model_anomaly.h5', compile=False)
-model_partial = keras.models.load_model('model/model_pconv.h5', compile=False, custom_objects={'PConv2D': PConv2D})
-ms1 = 
-lof1 = 
-flag = False
-status = "none"
-matrix = []
+model_hand = keras.models.load_model('model/model_hand.h5', compile=False)
 
-def anomaly_detection(img, ms, lof):
-    score = model_anomaly.predict(img, batch_size=1)
-    score = score.reshape((1,-1))
-    score = ms.fit_transform(score)
-    return -lof._decision_function(score)    
-
-def anomaly_detection_and_draw(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
+def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
     global flag, status, matrix
     if (scores[0] > score_thresh):
         (left, right, top, bottom) = (boxes[i][1] * im_width, boxes[i][3] * im_width,
@@ -33,53 +18,18 @@ def anomaly_detection_and_draw(num_hands_detect, score_thresh, scores, boxes, im
         p2 = (int(right), int(bottom))
         
         # pointer or not
-        if status == "none":
-            score = anomaly_detection(image_np[int(top):int(bottom), int(left):int(right)], ms1, lof1)
-            if score < thresh1:
-                flag = True
-                status = "pointer"
-                matrix.append([int(left), int(top)])
-            else:
-                status = "none"
-                
-        # magic or not
-        if flag == True and not status == "pointer":
-            score = anomaly_detection(image_np[int(top):int(bottom), int(left):int(right)], ms1, lof1)
-            if score < thresh2:
-                flag = False
-                status = "magic"
-                
-                # Mask
-                img = np.zeros(image_np.shape, np.uint8)
-                cv2.rectangle(img, (int(top), int(left)), (int(bottom), int(right)), (1, 1, 1), thickness=-1)
-                mask = 1-img
-
-                # Image + mask
-                img = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
-                img = cv2.resize(img, (m_input_size, m_input_size)) / 255
-                img[mask==0] = 1
-                predict_img = model.predict([np.expand_dims(img, axis=0), np.expand_dims(mask, axis=0)])
-
-                output = predict_img.reshape(image_np.shape)
-                output = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
-            else:
-                status = "none"
+        img = cv2.cvtColor(image_np[int(top):int(bottom)], cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, (96, 96)) / 255
+        result = model_hand.predict(np.expand_dims(img, axis=0))
+        result = np.argmax(result)
                 
         # hand draw
-        if status == "pointer":
+        if result == 11#"pointer":
             cv2.rectangle(image_np, p1, p2, (77, 77, 255), 3, 1)
-        elif status == "magic":
+        elif result == 12#"magic":
             cv2.rectangle(image_np, p1, p2, (255, 241, 144), 3, 1)
         else: #normal
             cv2.rectangle(image_np, p1, p2, (77, 255, 9), 3, 1)
-            
-    # pointer draw
-    if flag == True: 
-        if len(matrix) > 2:
-            xy = np.array(matrix)
-            p1 = (int(np.min(xy[:,0])), int(np.min(xy[:,1])))
-            p2 = (int(np.max(xy[:,0])), int(np.max(xy[:,1])))
-            cv2.rectangle(image_np, p1, p2, (255, 77, 77), 3, 1)
 
 if __name__ == '__main__':
 
