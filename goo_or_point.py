@@ -4,29 +4,45 @@ import tensorflow as tf
 import datetime
 import argparse
 import numpy as np
+import keras
 
 detection_graph, sess = detector_utils.load_inference_graph()
 print("model loading...")
 model_hand = keras.models.load_model('model/model_hand.h5', compile=False)
+status = "none"
+predict_num = 0
+result = np.zeros((1,13))
 
 def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
-    global flag, status, matrix
+    global status, predict_num, result
     if (scores[0] > score_thresh):
-        (left, right, top, bottom) = (boxes[i][1] * im_width, boxes[i][3] * im_width,
-                                      boxes[i][0] * im_height, boxes[i][2] * im_height)
+        (left, right, top, bottom) = (boxes[0][1] * im_width, boxes[0][3] * im_width,
+                                      boxes[0][0] * im_height, boxes[0][2] * im_height)
         p1 = (int(left), int(top))
         p2 = (int(right), int(bottom))
         
-        # pointer or not
-        img = cv2.cvtColor(image_np[int(top):int(bottom)], cv2.COLOR_BGR2RGB)
+        # hand classfier
+        img = cv2.cvtColor(image_np[int(top):int(bottom), int(left):int(right)], cv2.COLOR_BGR2RGB)
         img = cv2.resize(img, (96, 96)) / 255
-        result = model_hand.predict(np.expand_dims(img, axis=0))
-        result = np.argmax(result)
-                
+        score = model_hand.predict(np.expand_dims(img, axis=0))
+        result += score
+        predict_num += 1
+        
+        #update
+        if predict_num == 3:
+            if np.argmax(result) == 11:
+               status = "pointer"
+            elif np.argmax(result) == 12:
+               status = "goo"
+            else:
+               status = "anomaly"
+            result *= 0
+            predict_num = 0
+                        
         # hand draw
-        if result == 11#"pointer":
+        if status == "pointer":#"pointer"
             cv2.rectangle(image_np, p1, p2, (77, 77, 255), 3, 1)
-        elif result == 12#"magic":
+        elif result == "goo":#"magic"
             cv2.rectangle(image_np, p1, p2, (255, 241, 144), 3, 1)
         else: #normal
             cv2.rectangle(image_np, p1, p2, (77, 255, 9), 3, 1)
@@ -120,13 +136,9 @@ if __name__ == '__main__':
                                                       detection_graph, sess)
 
         # draw bounding boxes on frame
-        detector_utils.draw_box_on_image(num_hands_detect, args.score_thresh,
+        hand_classfier(num_hands_detect, args.score_thresh,
                                          scores, boxes, im_width, im_height,
                                          image_np)
-        
-        detector_utils.draw_point(cnum_hands_detect, args.score_thresh,
-                                         scores, boxes, im_width, im_height,
-                                         image_np, matrix)
 
         # Calculate Frames per second (FPS)
         num_frames += 1
