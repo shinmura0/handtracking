@@ -42,7 +42,7 @@ def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_h
         # hand draw
         if status == "pointer":#"pointer"
             cv2.rectangle(image_np, p1, p2, (77, 77, 255), 3, 1)
-        elif result == "goo":#"magic"
+        elif status == "goo":#"magic"
             cv2.rectangle(image_np, p1, p2, (255, 241, 144), 3, 1)
         else: #normal
             cv2.rectangle(image_np, p1, p2, (77, 255, 9), 3, 1)
