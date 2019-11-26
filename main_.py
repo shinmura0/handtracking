@@ -1,41 +1,37 @@
 from utils import detector_utils as detector_utils
+from libs.pconv_layer import PConv2D
 import cv2
 import tensorflow as tf
 import datetime
 import argparse
+import numpy as np
+import keras
 
-thresh1 = 10
-thresh2 = 10
 m_input_size = 256
 
 detection_graph, sess = detector_utils.load_inference_graph()
 print("model loading...")
-model_anomaly = keras.models.load_model('model/model_anomaly.h5', compile=False)
-model_partial = keras.models.load_model('model/model_pconv.h5', compile=False, custom_objects={'PConv2D': PConv2D})
-ms1 = 
-lof1 = 
+model_hand = keras.models.load_model('model/model_anomaly.h5', compile=False)
+model_partial = keras.models.load_model('model/model_partial.h5', compile=False, custom_objects={'PConv2D': PConv2D})
 flag = False
 status = "none"
 matrix = []
 
-def anomaly_detection(img, ms, lof):
-    score = model_anomaly.predict(img, batch_size=1)
-    score = score.reshape((1,-1))
-    score = ms.fit_transform(score)
-    return -lof._decision_function(score)    
-
-def anomaly_detection_and_draw(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
-    global flag, status, matrix
+def hand_classifer(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
+    global flag, status, matrix, predict_num
     if (scores[0] > score_thresh):
-        (left, right, top, bottom) = (boxes[i][1] * im_width, boxes[i][3] * im_width,
-                                      boxes[i][0] * im_height, boxes[i][2] * im_height)
+        (left, right, top, bottom) = (boxes[0][1] * im_width, boxes[0][3] * im_width,
+                                      boxes[0][0] * im_height, boxes[0][2] * im_height)
         p1 = (int(left), int(top))
         p2 = (int(right), int(bottom))
         
         # pointer or not
         if status == "none":
-            score = anomaly_detection(image_np[int(top):int(bottom), int(left):int(right)], ms1, lof1)
-            if score < thresh1:
+            img = cv2.cvtColor(image_np[int(top):int(bottom), int(left):int(right)], cv2.COLOR_BGR2RGB)
+            img = cv2.resize(img, (96, 96)) / 255
+            result = model_hand.predict(np.expand_dims(img, axis=0))
+            result = np.argmax(result)
+            if result == 11:# pointer
                 flag = True
                 status = "pointer"
                 matrix.append([int(left), int(top)])
@@ -170,13 +166,9 @@ if __name__ == '__main__':
                                                       detection_graph, sess)
 
         # draw bounding boxes on frame
-        detector_utils.draw_box_on_image(num_hands_detect, args.score_thresh,
+        hand_classifer(num_hands_detect, args.score_thresh,
                                          scores, boxes, im_width, im_height,
                                          image_np)
-        
-        detector_utils.draw_point(cnum_hands_detect, args.score_thresh,
-                                         scores, boxes, im_width, im_height,
-                                         image_np, matrix)
 
         # Calculate Frames per second (FPS)
         num_frames += 1
