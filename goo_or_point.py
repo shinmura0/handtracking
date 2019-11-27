@@ -11,7 +11,9 @@ print("model loading...")
 model_hand = keras.models.load_model('model/model_hand.h5', compile=False)
 status = "none"
 predict_num = 0
-result = np.zeros((1,13))
+result = np.zeros((1,3))
+thresh = 0.99
+moving_num = 3
 
 def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
     global status, predict_num, result
@@ -29,11 +31,15 @@ def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_h
         predict_num += 1
         
         #update
-        if predict_num == 3:
-            if np.argmax(result) == 11:
+        if predict_num == moving_num:
+            if np.argmax(result) == 1:
                status = "pointer"
-            elif np.argmax(result) == 12:
+               if np.max(result)/moving_num < thresh:
+                    status = "anomaly"
+            elif np.argmax(result) == 2:
                status = "goo"
+               if np.max(result)/moving_num < thresh:
+                    status = "anomaly"
             else:
                status = "anomaly"
             result *= 0
