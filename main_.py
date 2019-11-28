@@ -7,59 +7,82 @@ import argparse
 import numpy as np
 import keras
 
-m_input_size = 256
+thresh = 0.9
+moving_num = 3
 
 detection_graph, sess = detector_utils.load_inference_graph()
 print("model loading...")
-model_hand = keras.models.load_model('model/model_anomaly.h5', compile=False)
+model_hand = keras.models.load_model('model/model_hand.h5', compile=False)
 model_partial = keras.models.load_model('model/model_partial.h5', compile=False, custom_objects={'PConv2D': PConv2D})
 flag = False
 status = "none"
 matrix = []
+predict_num = 0
+result = np.zeros((1,3))
+m_input_size = 256
 
-def hand_classifer(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
-    global flag, status, matrix, predict_num
+def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
+    global status, predict_num, result, matrix
     if (scores[0] > score_thresh):
         (left, right, top, bottom) = (boxes[0][1] * im_width, boxes[0][3] * im_width,
                                       boxes[0][0] * im_height, boxes[0][2] * im_height)
         p1 = (int(left), int(top))
         p2 = (int(right), int(bottom))
         
-        # pointer or not
-        if status == "none":
-            img = cv2.cvtColor(image_np[int(top):int(bottom), int(left):int(right)], cv2.COLOR_BGR2RGB)
-            img = cv2.resize(img, (96, 96)) / 255
-            result = model_hand.predict(np.expand_dims(img, axis=0))
-            result = np.argmax(result)
-            if result == 11:# pointer
-                flag = True
-                status = "pointer"
-                matrix.append([int(left), int(top)])
+        # hand classfier
+        img = cv2.cvtColor(image_np[int(top):int(bottom), int(left):int(right)], cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, (96, 96)) / 255
+        score = model_hand.predict(np.expand_dims(img, axis=0))
+        result += score
+        predict_num += 1
+        
+        #update
+        if predict_num == moving_num:
+            if np.argmax(result) == 1:
+               status = "pointer"
+               if np.max(result)/moving_num < thresh:
+                    status = "anomaly"
+            elif np.argmax(result) == 2:
+               status = "goo"
+               if np.max(result)/moving_num < thresh:
+                    status = "anomaly"
             else:
-                status = "none"
-                
+               status = "anomaly"
+            result *= 0
+            predict_num = 0
+                        
+        # hand draw
+        if status == "pointer":#"pointer"
+            cv2.rectangle(image_np, p1, p2, (77, 77, 255), 3, 1)
+        elif status == "goo":#"magic"
+            cv2.rectangle(image_np, p1, p2, (255, 241, 144), 3, 1)
+        else: #normal
+            cv2.rectangle(image_np, p1, p2, (77, 255, 9), 3, 1)
+            
+        #pointer or not
+        if status == "pointer":
+            flag = True
+            matrix.append([int(left), int(top)])
+            
         # magic or not
-        if flag == True and not status == "pointer":
-            score = anomaly_detection(image_np[int(top):int(bottom), int(left):int(right)], ms1, lof1)
-            if score < thresh2:
-                flag = False
-                status = "magic"
-                
-                # Mask
-                img = np.zeros(image_np.shape, np.uint8)
-                cv2.rectangle(img, (int(top), int(left)), (int(bottom), int(right)), (1, 1, 1), thickness=-1)
-                mask = 1-img
+        if flag == True and status == "goo":
+            # Mask
+            img = np.zeros(image_np.shape, np.uint8)
+            xy = np.array(matrix)
+            p1_ = (int(np.min(xy[:,0])), int(np.min(xy[:,1])))
+            p2_ = (int(np.max(xy[:,0])), int(np.max(xy[:,1])))
+            cv2.rectangle(img, p1_, p2_, (1, 1, 1), thickness=-1)
+            img = cv2.resize(img, (m_input_size, m_input_size))
+            mask = 1-img
 
-                # Image + mask
-                img = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
-                img = cv2.resize(img, (m_input_size, m_input_size)) / 255
-                img[mask==0] = 1
-                predict_img = model.predict([np.expand_dims(img, axis=0), np.expand_dims(mask, axis=0)])
+            # Image + mask
+            img = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
+            img = cv2.resize(img, (m_input_size, m_input_size)) / 255
+            img[mask==0] = 1
+            predict_img = model.predict([np.expand_dims(img, axis=0), np.expand_dims(mask, axis=0)])
 
-                output = predict_img.reshape(image_np.shape)
-                output = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
-            else:
-                status = "none"
+            output = predict_img.reshape(image_np.shape)
+            image_np = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
                 
         # hand draw
         if status == "pointer":
@@ -70,7 +93,7 @@ def hand_classifer(num_hands_detect, score_thresh, scores, boxes, im_width, im_h
             cv2.rectangle(image_np, p1, p2, (77, 255, 9), 3, 1)
             
     # pointer draw
-    if flag == True: 
+    if flag == True and not status == "goo": 
         if len(matrix) > 2:
             xy = np.array(matrix)
             p1 = (int(np.min(xy[:,0])), int(np.min(xy[:,1])))
@@ -166,7 +189,7 @@ if __name__ == '__main__':
                                                       detection_graph, sess)
 
         # draw bounding boxes on frame
-        hand_classifer(num_hands_detect, args.score_thresh,
+        hand_classfier(num_hands_detect, args.score_thresh,
                                          scores, boxes, im_width, im_height,
                                          image_np)
 
