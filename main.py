@@ -22,7 +22,7 @@ result = np.zeros((1,3))
 m_input_size = 256
 
 def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
-    global status, predict_num, result, matrix
+    global status, predict_num, result, matrix, flag
     if (scores[0] > score_thresh):
         (left, right, top, bottom) = (boxes[0][1] * im_width, boxes[0][3] * im_width,
                                       boxes[0][0] * im_height, boxes[0][2] * im_height)
@@ -79,9 +79,9 @@ def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_h
             img = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
             img = cv2.resize(img, (m_input_size, m_input_size)) / 255
             img[mask==0] = 1
-            predict_img = model.predict([np.expand_dims(img, axis=0), np.expand_dims(mask, axis=0)])
+            predict_img = model_partial.predict([np.expand_dims(img, axis=0), np.expand_dims(mask, axis=0)])
 
-            output = predict_img.reshape(image_np.shape)
+            output = cv2.resize(predict_img[0], (image_np.shape[0], image_np.shape[1]))
             image_np = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
                 
         # hand draw
@@ -99,6 +99,8 @@ def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_h
             p1 = (int(np.min(xy[:,0])), int(np.min(xy[:,1])))
             p2 = (int(np.max(xy[:,0])), int(np.max(xy[:,1])))
             cv2.rectangle(image_np, p1, p2, (255, 77, 77), 3, 1)
+
+    return image_np
 
 if __name__ == '__main__':
 
@@ -128,14 +130,14 @@ if __name__ == '__main__':
         '--width',
         dest='width',
         type=int,
-        default=320,
+        default=352,
         help='Width of the frames in the video stream.')
     parser.add_argument(
         '-ht',
         '--height',
         dest='height',
         type=int,
-        default=180,
+        default=288,
         help='Height of the frames in the video stream.')
     parser.add_argument(
         '-ds',
@@ -166,7 +168,7 @@ if __name__ == '__main__':
 
     start_time = datetime.datetime.now()
     num_frames = 0
-    im_width, im_height = (cap.get(3), cap.get(4))
+    im_width, im_height = (m_input_size, m_input_size)#(cap.get(3), cap.get(4))
     # max number of hands we want to detect/track
     num_hands_detect = 2
 
@@ -175,6 +177,7 @@ if __name__ == '__main__':
     while True:
         # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
         ret, image_np = cap.read()
+        image_np = image_np[16:272, 48:304]
         # image_np = cv2.flip(image_np, 1)
         try:
             image_np = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
@@ -189,7 +192,7 @@ if __name__ == '__main__':
                                                       detection_graph, sess)
 
         # draw bounding boxes on frame
-        hand_classfier(num_hands_detect, args.score_thresh,
+        image_np = hand_classfier(num_hands_detect, args.score_thresh,
                                          scores, boxes, im_width, im_height,
                                          image_np)
 
@@ -207,9 +210,14 @@ if __name__ == '__main__':
             cv2.imshow('Single-Threaded Detection',
                        cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR))
 
-            if cv2.waitKey(25) & 0xFF == ord('q'):
+            key = cv2.waitKey(25)&0xFF
+            if key == ord("q"):
                 cv2.destroyAllWindows()
                 break
+            if key == ord("r"):
+                flag = False
+                status = "none"
+                matrix = []
         else:
             print("frames processed: ", num_frames, "elapsed time: ",
                   elapsed_time, "fps: ", str(int(fps)))
