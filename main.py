@@ -10,16 +10,19 @@ import keras
 thresh = 0.9
 moving_num = 3
 
+m_input_size = 256
 detection_graph, sess = detector_utils.load_inference_graph()
 print("model loading...")
 model_hand = keras.models.load_model('model/model_hand.h5', compile=False)
+_ = model_hand.predict(np.zeros((1,96,96,3)))
 model_partial = keras.models.load_model('model/model_partial.h5', compile=False, custom_objects={'PConv2D': PConv2D})
+_ = model_partial.predict([np.zeros((1,m_input_size,m_input_size,3)), np.zeros((1,m_input_size,m_input_size,3))])
 flag = False
+start_flag = False
 status = "none"
 matrix = []
 predict_num = 0
 result = np.zeros((1,3))
-m_input_size = 256
 
 def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_height, image_np):
     global status, predict_num, result, matrix, flag
@@ -42,9 +45,13 @@ def hand_classfier(num_hands_detect, score_thresh, scores, boxes, im_width, im_h
                status = "pointer"
                if np.max(result)/moving_num < thresh:
                     status = "anomaly"
+               if start_flag == False:
+                    status = "anomaly"
             elif np.argmax(result) == 2:
                status = "goo"
                if np.max(result)/moving_num < thresh:
+                    status = "anomaly"
+               if start_flag == False:
                     status = "anomaly"
             else:
                status = "anomaly"
@@ -216,8 +223,12 @@ if __name__ == '__main__':
                 break
             if key == ord("r"):
                 flag = False
+                start_flag = False
                 status = "none"
                 matrix = []
+            if key == ord("s"):
+                start_flag = True
+
         else:
             print("frames processed: ", num_frames, "elapsed time: ",
                   elapsed_time, "fps: ", str(int(fps)))
